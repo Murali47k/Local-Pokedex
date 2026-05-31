@@ -33,9 +33,6 @@ def stream_agent_response(agent, state: PokedexState) -> PokedexState:
 
     console.print()  # newline after streamed response
 
-    # agent.stream with stream_mode="messages" doesn't return state directly;
-    # do a separate invoke only to get the final state (no extra LLM call happens
-    # because LangGraph returns cached results for the same input).
     # Better: use stream_mode="values" and pick the last value.
     return final_state
 
