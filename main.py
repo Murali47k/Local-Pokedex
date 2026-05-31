@@ -3,7 +3,7 @@ from langchain_core.messages import HumanMessage
 
 from agent import build_agent
 from state import PokedexState
-from ui import print_welcome, print_user, print_agent, print_error, print_status
+from ui import print_welcome,print_user,print_agent,print_error,print_status
 
 
 def main():
