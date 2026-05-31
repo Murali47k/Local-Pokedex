@@ -10,7 +10,7 @@ THEME = Theme(
         "pokemon.stat": "green",
         "pokemon.label": "dim white",
         "agent": "bold magenta",
-        "user": "bold green",
+        "user": "bold yellow",
         "error": "bold red",
     }
 )
