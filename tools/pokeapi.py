@@ -1,23 +1,29 @@
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from langchain_core.tools import tool
 from .cache import get_cached, set_cached
 
 
 BASE_URL = "https://pokeapi.co/api/v2"
 
+# Reuse a single session for connection pooling (big win on repeated calls)
+_session = requests.Session()
+_session.headers.update({"User-Agent": "local-pokedex/1.0"})
+
 
 def _fetch(endpoint: str) -> dict:
-    r = requests.get(f"{BASE_URL}/{endpoint}", timeout=10)
+    r = _session.get(f"{BASE_URL}/{endpoint}", timeout=10)
     r.raise_for_status()
     return r.json()
 
 
 @tool
 def get_pokemon_info(name: str) -> str:
-    """Get base stats, types, and abilities for the Pokémon by name."""
+    """Get base stats, types, and abilities for a Pokémon by name."""
     name = name.lower().strip()
+    cache_key = f"info:{name}"
 
-    cached = get_cached(name)
+    cached = get_cached(cache_key)
     if cached:
         return cached
 
@@ -46,7 +52,7 @@ def get_pokemon_info(name: str) -> str:
         f"Speed: {stats.get('speed')}\n"
     )
 
-    set_cached(name, result)
+    set_cached(cache_key, result)
     return result
 
 
@@ -54,6 +60,12 @@ def get_pokemon_info(name: str) -> str:
 def get_evolution_chain(name: str) -> str:
     """Get the full evolution chain for a Pokémon."""
     name = name.lower().strip()
+    cache_key = f"evo:{name}"
+
+    cached = get_cached(cache_key)
+    if cached:
+        return cached
+
     try:
         species = _fetch(f"pokemon-species/{name}")
         chain_url = species["evolution_chain"]["url"]
@@ -80,14 +92,21 @@ def get_evolution_chain(name: str) -> str:
             lines.append("  -> " + "\n  -> ".join(parse_chain(evo)))
         return lines
 
-    chain = chain_data["chain"]
-    return "\n".join(parse_chain(chain))
+    result = "\n".join(parse_chain(chain_data["chain"]))
+    set_cached(cache_key, result)
+    return result
 
 
 @tool
 def get_moves(name: str, generation: int = 9) -> str:
     """Get moves a Pokémon can learn in a given generation."""
     name = name.lower().strip()
+    cache_key = f"moves:{name}:gen{generation}"
+
+    cached = get_cached(cache_key)
+    if cached:
+        return cached
+
     gen_map = {
         1: "red-blue", 2: "gold-silver", 3: "ruby-sapphire",
         4: "diamond-pearl", 5: "black-white", 6: "x-y",
@@ -116,4 +135,6 @@ def get_moves(name: str, generation: int = 9) -> str:
         return f"{name.capitalize()} has no move data for Generation {generation}."
 
     moves.sort()
-    return f"Moves for {name.capitalize()} (Gen {generation}):\n" + "\n".join(moves[:40])
+    result = f"Moves for {name.capitalize()} (Gen {generation}):\n" + "\n".join(moves[:40])
+    set_cached(cache_key, result)
+    return result
