@@ -1,5 +1,4 @@
 import sqlite3
-import json
 import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "pokedex_cache.db")

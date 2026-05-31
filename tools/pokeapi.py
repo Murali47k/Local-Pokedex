@@ -14,7 +14,7 @@ def _fetch(endpoint: str) -> dict:
 
 @tool
 def get_pokemon_info(name: str) -> str:
-    """Get base stats, types, and abilities for a Pokémon by name."""
+    """Get base stats, types, and abilities for the Pokémon by name."""
     name = name.lower().strip()
 
     cached = get_cached(name)
