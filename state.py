@@ -4,6 +4,7 @@ from langgraph.graph.message import add_messages
 
 
 class PokedexState(TypedDict):
+    """Represents the state of the Pokédex conversation."""
     messages: Annotated[list, add_messages]
     current_pokemon: str
     current_generation: int
