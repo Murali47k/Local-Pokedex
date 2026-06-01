@@ -4,16 +4,6 @@ Local AI-powered Pokédex using **LangGraph + Ollama**.
 Two cooperating agents: a **Fetcher** that queries the PokéAPI and composes responses,  
 and a **Verifier** that audits every answer before it reaches you.
 
-## What's new vs. the original
-
-| Feature | Before | Now |
-|---|---|---|
-| Caching | SQLite cache | **Removed** — always live from PokéAPI |
-| Agents | Single agent | **Fetcher + Verifier** pipeline |
-| Type matchup | Guessed by LLM | `get_type_matchup` tool (never hallucinated) |
-| Lore style | Plain summary | **Immersive Pokédex lore** voice |
-| Stats format | Inline text | Aligned stat block with total |
-| Verifier visibility | — | `--verbose` flag or type `verbose` at runtime |
 
 ## Setup
 
@@ -52,21 +42,27 @@ pokedex-agent/
 
 ## How the dual-agent pipeline works
 
-```
-User message
-     │
-     ▼
- [Fetcher]  ── calls tools (PokéAPI) ─► [Tool Node] ──┐
-     ▲                                                  │
-     └──────────────── loops until no more tool calls ──┘
-     │
-     │  (final text draft)
-     ▼
- [Verifier]  ── audits draft vs. raw tool data
-     │
-     ▼
-  PASS → show corrected/confirmed response
-  FAIL → show Verifier's corrected response
+mermaid```
+flowchart LR
+
+    U[User]
+
+    subgraph Fetch Phase
+        F[Fetcher]
+        T[Tool Node]
+        F -->|Calls Tools| T
+        T -->|Returns Data| F
+    end
+
+    subgraph Verification Phase
+        V[Verifier]
+    end
+
+    R[Response]
+
+    U --> F
+    F -->|Draft Answer + Tool Results| V
+    V -->|PASS / Corrected Output| R
 ```
 
 The Verifier never calls tools itself — it only checks the Fetcher's output
