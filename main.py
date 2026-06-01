@@ -3,42 +3,13 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from agent import build_agent
 from state import PokedexState
-from ui import print_welcome, print_user, print_agent, print_error, print_status
-from ui import console
-
-
-def stream_agent_response(agent, state: PokedexState) -> PokedexState:
-    """Stream tokens to the terminal as they arrive, return updated state."""
-    final_state = state
-    console.print("\n[bold magenta]Pokédex:[/bold magenta] ", end="")
-
-    last_content_printed = ""
-
-    for chunk, metadata in agent.stream(state, stream_mode="messages"):
-        # Only stream AIMessage text chunks (skip tool calls / tool results)
-        if isinstance(chunk, AIMessage) and chunk.content:
-            text = chunk.content
-            # Avoid reprinting already-seen content (some backends emit full text each chunk)
-            if text.startswith(last_content_printed):
-                new_part = text[len(last_content_printed):]
-            else:
-                new_part = text
-            if new_part:
-                console.print(new_part, end="", highlight=False)
-                last_content_printed += new_part
-
-        # Capture the final graph state from the last metadata chunk
-        if hasattr(chunk, "__class__") and chunk.__class__.__name__ == "StateSnapshot":
-            final_state = chunk
-
-    console.print()  # newline after streamed response
-
-    # Better: use stream_mode="values" and pick the last value.
-    return final_state
+from ui import console, print_welcome, print_user, print_agent, print_verifier, print_error, print_status
 
 
 def main():
     model = sys.argv[1] if len(sys.argv) > 1 else "llama3.1"
+    verbose = "--verbose" in sys.argv   # show verifier output
+
     print_welcome()
     print_status(f"Loading model: {model}")
 
@@ -53,6 +24,9 @@ def main():
         "messages": [],
         "current_pokemon": "",
         "current_generation": 9,
+        "raw_data": None,
+        "verified": None,
+        "verification_notes": None,
     }
 
     print_status("Ready")
@@ -67,9 +41,15 @@ def main():
 
         if not user_input:
             continue
+
         if user_input.lower() in ("exit", "quit", "q"):
             print("Goodbye!")
             break
+
+        if user_input.lower() == "verbose":
+            verbose = not verbose
+            print_status(f"Verifier output {'ON' if verbose else 'OFF'}")
+            continue
 
         if user_input.lower().startswith("gen "):
             try:
@@ -78,20 +58,29 @@ def main():
                 print_agent(f"Generation set to {gen}.")
                 continue
             except ValueError:
-                pass
+                print_error("Usage: gen <number>  e.g. gen 4")
+                continue
 
         state["messages"] = state["messages"] + [HumanMessage(content=user_input)]
 
         try:
-            # Use stream_mode="values" — yields the full state after each node,
-            # letting us stream tokens AND capture the final state in one pass.
-            final_state = state
+            # ── Stream tokens from the fetcher as they arrive ─────────────────
             console.print("\n[bold magenta]Pokédex:[/bold magenta] ", end="")
             printed = ""
 
+            final_state = state
+
             for event in agent.stream(state, stream_mode="messages"):
-                chunk, _meta = event
-                if isinstance(chunk, AIMessage) and chunk.content:
+                chunk, meta = event
+                node = meta.get("langgraph_node", "")
+
+                # Stream only the fetcher's final text output (skip tool calls)
+                if (
+                    node == "fetcher"
+                    and isinstance(chunk, AIMessage)
+                    and chunk.content
+                    and not getattr(chunk, "tool_calls", None)
+                ):
                     text = chunk.content
                     new_part = text[len(printed):] if text.startswith(printed) else text
                     if new_part:
@@ -100,12 +89,23 @@ def main():
 
             console.print("\n")
 
-            # Sync state after streaming (invoke reuses the compiled graph cache)
+            # ── Capture full final state ──────────────────────────────────────
             final_state = agent.invoke(state)
+
+            # ── Show verifier notes if verbose ────────────────────────────────
+            if verbose and final_state.get("verification_notes"):
+                notes = final_state["verification_notes"]
+                verdict_line = next(
+                    (l for l in notes.splitlines() if "VERDICT" in l.upper()), ""
+                )
+                print_verifier(verdict_line or notes[:200])
+
             state = final_state
 
         except Exception as e:
             print_error(f"Agent error: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":
