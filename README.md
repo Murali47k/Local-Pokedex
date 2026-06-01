@@ -42,7 +42,7 @@ pokedex-agent/
 
 ## How the dual-agent pipeline works
 
-mermaid```
+```mermaid
 flowchart LR
 
     U[User]
